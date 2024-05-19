@@ -65,7 +65,7 @@ class DatasetDownloader:
             response.raise_for_status()
 
             with open(local_file_path, 'wb') as file:
-                for chunk in tqdm(response.iter_content(chunk_size=8192)):
+                for chunk in tqdm(response.iter_content(chunk_size=8192), desc=f'Downloading {os.path.basename(local_file_path)}'):
                     file.write(chunk)
 
             print(f'Successfully downloaded {url} to {local_file_path}')
@@ -103,5 +103,5 @@ DREAMBOOTH_DATA_URL = "https://data255-cartoongan.s3.amazonaws.com/dreambooth/dr
 if __name__ == "__main__":
     data_dir = os.path.join(os.getcwd(), 'datasets')
     downloader = DatasetDownloader(data_dir)
-    downloader.download_and_unzip("cartoon-gan")
+    downloader.download_and_unzip("danbooru")
     downloader.download_and_unzip("dreambooth")
