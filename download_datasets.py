@@ -25,7 +25,7 @@ class DatasetDownloader:
 
     def download_and_unzip(self, dataset: str) -> None:
         """
-        Downloads and unzips the specified dataset for the Cartoon GAN network or the Dreambooth network.
+        Downloads and unzips the specified dataset for the Cartoon GAN network or the Dreambooth network and deletes zip file
 
         Args:
             dataset (str): The name of the dataset to download. 
@@ -45,6 +45,7 @@ class DatasetDownloader:
             raise ValueError("[ERROR] The dataset name is not valid. Please specify either 'danbooru' or 'dreambooth'.")
 
         self._unzip_file(os.path.join(self.data_dir, f"{dataset}.zip"), os.path.join(self.data_dir, dataset))
+        os.remove(os.path.join(self.data_dir, f"{dataset}.zip"))
 
     def _download_file_from_s3(self, url: str, local_file_path: str) -> None:
         """
