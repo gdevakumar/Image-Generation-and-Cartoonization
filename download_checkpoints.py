@@ -31,8 +31,8 @@ class CheckpointsDownloader:
         Returns:
             None
         """
-        self._download_file_from_s3(MODEL_1, os.path.join(os.getcwd(), 'best_checkpoints', 'cartoongan', 'model_1_checkpoint_ep210.pth'))
-        self._download_file_from_s3(MODEL_2, os.path.join(os.getcwd(), 'best_checkpoints', 'cartoongan', 'model_2_checkpoint_ep210.pth'))
+        # self._download_file_from_s3(MODEL_1, os.path.join(os.getcwd(), 'best_checkpoints', 'cartoongan', 'model_1_checkpoint_ep210.pth'))
+        # self._download_file_from_s3(MODEL_2, os.path.join(os.getcwd(), 'best_checkpoints', 'cartoongan', 'model_2_checkpoint_ep210.pth'))
         self._download_file_from_s3(MODEL_3, os.path.join(os.getcwd(), 'best_checkpoints', 'cartoongan', 'model_3_checkpoint_ep220.pth'))
         # self._download_file_from_s3(DREAMBOOTH_CHKPTS, os.path.join(os.getcwd(), 'best_checkpoints', 'dreambooth', 'dreambooth_ep10k.pth'))
 

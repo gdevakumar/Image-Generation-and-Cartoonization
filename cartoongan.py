@@ -4,10 +4,13 @@ import math
 import time
 import torch
 import numpy as np
+import gradio as gr
 import torch.nn as nn
 from tqdm import tqdm
+from typing import Union
 from torch import sigmoid
 import torch.optim as optim
+from torch.nn import BCELoss
 from torchvision import models
 import matplotlib.pyplot as plt
 import torch.nn.functional as F
@@ -17,8 +20,87 @@ from skimage import io, img_as_ubyte
 from torchvision import transforms as T
 from torchvision.datasets import ImageFolder
 from torch.utils.data import DataLoader, random_split
-from torch.utils.tensorboard import SummaryWriter
-from torch.nn import BCELoss
+from download_checkpoints import CheckpointsDownloader
+
+class ResidualBlock(nn.Module):
+    """
+    Residual Network Block with 2 Convolution and BatchNorm layers
+    """
+    def __init__(self):
+        super().__init__()
+        self.conv_1 = nn.Conv2d(in_channels=256, out_channels=256, kernel_size=3, stride=1, padding=1)
+        self.conv_2 = nn.Conv2d(in_channels=256, out_channels=256, kernel_size=3, stride=1, padding=1)
+        self.norm_1 = nn.BatchNorm2d(256)
+        self.norm_2 = nn.BatchNorm2d(256)
+
+    def forward(self, x):
+        output = self.norm_2(self.conv_2(F.relu(self.norm_1(self.conv_1(x)))))
+        return output + x 
+
+class Generator(nn.Module):
+    """
+    Generator Network
+    """
+    def __init__(self):
+        super().__init__()
+        self.conv_1 = nn.Conv2d(in_channels=3, out_channels=64, kernel_size=7, stride=1, padding=3)
+        self.norm_1 = nn.BatchNorm2d(64)
+        self.conv_2 = nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, stride=2, padding=1)
+        self.conv_3 = nn.Conv2d(in_channels=128, out_channels=128, kernel_size=3, stride=1, padding=1)
+        self.norm_2 = nn.BatchNorm2d(128)
+        self.conv_4 = nn.Conv2d(in_channels=128, out_channels=256, kernel_size=3, stride=2, padding=1)
+        self.conv_5 = nn.Conv2d(in_channels=256, out_channels=256, kernel_size=3, stride=1, padding=1)
+        self.norm_3 = nn.BatchNorm2d(256)
+        self.residual_blocks = [ResidualBlock() for _ in range(8)]
+        self.res = nn.Sequential(*self.residual_blocks)
+        self.conv_6 = nn.ConvTranspose2d(in_channels=256, out_channels=128, kernel_size=3, stride=2, padding=1, output_padding=1)
+        self.conv_7 = nn.ConvTranspose2d(in_channels=128, out_channels=128, kernel_size=3, stride=1, padding=1)
+        self.norm_4 = nn.BatchNorm2d(128)
+        self.conv_8 = nn.ConvTranspose2d(in_channels=128, out_channels=64, kernel_size=3, stride=2, padding=1, output_padding=1)
+        self.conv_9 = nn.ConvTranspose2d(in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=1)
+        self.norm_5 = nn.BatchNorm2d(64)
+        self.conv_10 = nn.Conv2d(in_channels=64, out_channels=3, kernel_size=7, stride=1, padding=3)
+        self.dropout = nn.Dropout(0.2)
+
+    def forward(self, x):
+        x = F.relu(self.norm_1(self.conv_1(x)))
+        x = self.dropout(x)
+        x = F.relu(self.norm_2(self.conv_3(self.conv_2(x))))
+        x = F.relu(self.norm_3(self.conv_5(self.conv_4(x))))
+        x = self.res(x)
+        x = F.relu(self.norm_4(self.conv_7(self.conv_6(x))))
+        x = F.relu(self.norm_5(self.conv_9(self.conv_8(x))))
+        x = self.dropout(x)
+        x = self.conv_10(x)
+        x = sigmoid(x)
+        return x
+
+
+class Discriminator(nn.Module):
+    """
+    Discriminator Network
+    """
+    def __init__(self):
+        super().__init__()
+        self.conv_1 = nn.Conv2d(in_channels=3, out_channels=32, kernel_size=3, stride=1, padding=1)
+        self.conv_2 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, stride=2, padding=1)
+        self.conv_3 = nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, stride=1, padding=1)
+        self.norm_1 = nn.BatchNorm2d(128)
+        self.conv_4 = nn.Conv2d(in_channels=128, out_channels=128, kernel_size=3, stride=2, padding=1)
+        self.conv_5 = nn.Conv2d(in_channels=128, out_channels=256, kernel_size=3, stride=1, padding=1)
+        self.norm_2 = nn.BatchNorm2d(256)
+        self.conv_6 = nn.Conv2d(in_channels=256, out_channels=256, kernel_size=3, stride=1, padding=1)
+        self.norm_3 = nn.BatchNorm2d(256)
+        self.conv_7 = nn.Conv2d(in_channels=256, out_channels=1, kernel_size=3, stride=1, padding=1)
+
+    def forward(self, x):
+        x = F.leaky_relu(self.conv_1(x))
+        x = F.leaky_relu(self.norm_1(self.conv_3(F.leaky_relu(self.conv_2(x)))), negative_slope=0.2)
+        x = F.leaky_relu(self.norm_2(self.conv_5(F.leaky_relu(self.conv_4(x)))), negative_slope=0.2)
+        x = F.leaky_relu(self.norm_3(self.conv_6(x)), negative_slope=0.2)
+        x = self.conv_7(x)
+        x = sigmoid(x)
+        return x
 
 
 class CartoonGAN:
@@ -26,7 +108,6 @@ class CartoonGAN:
         self.image_size = 256
         self.batch_size = 32
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.writer = SummaryWriter('tensorboard')
         self.data_dir = os.path.join(os.getcwd(), 'datasets', 'danbooru', 'data', 'train')
 
         self._create_directories()
@@ -72,10 +153,10 @@ class CartoonGAN:
         self.photo_dataloader_valid = DataLoader(validation_set, self.batch_size, shuffle=True, num_workers=0)
 
     def _prepare_models(self):
-        self.G = self.Generator().to(self.device)
-        self.D = self.Discriminator().to(self.device)
+        self.G = Generator().to(self.device)
+        self.D = Discriminator().to(self.device)
 
-        vgg16 = models.vgg16(pretrained=True)
+        vgg16 = models.vgg16(weights='DEFAULT')
         self.feature_extractor = vgg16.features[:24].to(self.device)
         for param in self.feature_extractor.parameters():
             param.require_grad = False
@@ -88,94 +169,14 @@ class CartoonGAN:
         self.g_optimizer = optim.Adam(self.G.parameters(), lr, [beta1, beta2])
 
     def _prepare_losses(self):
-        self.discriminator_loss = self.DiscriminatorLoss(self.device, self.writer)
-        self.generator_loss = self.GeneratorLoss(self.feature_extractor, self.device, self.writer)
-
-    class ResidualBlock(nn.Module):
-        """
-        Residual Network Block with 2 Convolution and BatchNorm layers
-        """
-        def __init__(self):
-            super().__init__()
-            self.conv_1 = nn.Conv2d(in_channels=256, out_channels=256, kernel_size=3, stride=1, padding=1)
-            self.conv_2 = nn.Conv2d(in_channels=256, out_channels=256, kernel_size=3, stride=1, padding=1)
-            self.norm_1 = nn.BatchNorm2d(256)
-            self.norm_2 = nn.BatchNorm2d(256)
-
-        def forward(self, x):
-            output = self.norm_2(self.conv_2(F.relu(self.norm_1(self.conv_1(x)))))
-            return output + x 
-
-    class Generator(nn.Module):
-        """
-        Generator Network
-        """
-        def __init__(self):
-            super().__init__()
-            self.conv_1 = nn.Conv2d(in_channels=3, out_channels=64, kernel_size=7, stride=1, padding=3)
-            self.norm_1 = nn.BatchNorm2d(64)
-            self.conv_2 = nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, stride=2, padding=1)
-            self.conv_3 = nn.Conv2d(in_channels=128, out_channels=128, kernel_size=3, stride=1, padding=1)
-            self.norm_2 = nn.BatchNorm2d(128)
-            self.conv_4 = nn.Conv2d(in_channels=128, out_channels=256, kernel_size=3, stride=2, padding=1)
-            self.conv_5 = nn.Conv2d(in_channels=256, out_channels=256, kernel_size=3, stride=1, padding=1)
-            self.norm_3 = nn.BatchNorm2d(256)
-            residual_blocks = [CartoonGAN.ResidualBlock() for _ in range(8)]
-            self.res = nn.Sequential(*residual_blocks)
-            self.conv_6 = nn.ConvTranspose2d(in_channels=256, out_channels=128, kernel_size=3, stride=2, padding=1, output_padding=1)
-            self.conv_7 = nn.ConvTranspose2d(in_channels=128, out_channels=128, kernel_size=3, stride=1, padding=1)
-            self.norm_4 = nn.BatchNorm2d(128)
-            self.conv_8 = nn.ConvTranspose2d(in_channels=128, out_channels=64, kernel_size=3, stride=2, padding=1, output_padding=1)
-            self.conv_9 = nn.ConvTranspose2d(in_channels=64, out_channels=64, kernel_size=3, stride=1, padding=1)
-            self.norm_5 = nn.BatchNorm2d(64)
-            self.conv_10 = nn.Conv2d(in_channels=64, out_channels=3, kernel_size=7, stride=1, padding=3)
-            self.dropout = nn.Dropout(0.2)
-
-        def forward(self, x):
-            x = F.relu(self.norm_1(self.conv_1(x)))
-            x = self.dropout(x)
-            x = F.relu(self.norm_2(self.conv_3(self.conv_2(x))))
-            x = F.relu(self.norm_3(self.conv_5(self.conv_4(x))))
-            x = self.res(x)
-            x = F.relu(self.norm_4(self.conv_7(self.conv_6(x))))
-            x = F.relu(self.norm_5(self.conv_9(self.conv_8(x))))
-            x = self.dropout(x)
-            x = self.conv_10(x)
-            x = sigmoid(x)
-            return x
-
-    class Discriminator(nn.Module):
-        """
-        Discriminator Network
-        """
-        def __init__(self):
-            super().__init__()
-            self.conv_1 = nn.Conv2d(in_channels=3, out_channels=32, kernel_size=3, stride=1, padding=1)
-            self.conv_2 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, stride=2, padding=1)
-            self.conv_3 = nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, stride=1, padding=1)
-            self.norm_1 = nn.BatchNorm2d(128)
-            self.conv_4 = nn.Conv2d(in_channels=128, out_channels=128, kernel_size=3, stride=2, padding=1)
-            self.conv_5 = nn.Conv2d(in_channels=128, out_channels=256, kernel_size=3, stride=1, padding=1)
-            self.norm_2 = nn.BatchNorm2d(256)
-            self.conv_6 = nn.Conv2d(in_channels=256, out_channels=256, kernel_size=3, stride=1, padding=1)
-            self.norm_3 = nn.BatchNorm2d(256)
-            self.conv_7 = nn.Conv2d(in_channels=256, out_channels=1, kernel_size=3, stride=1, padding=1)
-
-        def forward(self, x):
-            x = F.leaky_relu(self.conv_1(x))
-            x = F.leaky_relu(self.norm_1(self.conv_3(F.leaky_relu(self.conv_2(x)))), negative_slope=0.2)
-            x = F.leaky_relu(self.norm_2(self.conv_5(F.leaky_relu(self.conv_4(x)))), negative_slope=0.2)
-            x = F.leaky_relu(self.norm_3(self.conv_6(x)), negative_slope=0.2)
-            x = self.conv_7(x)
-            x = sigmoid(x)
-            return x
+        self.discriminator_loss = self.DiscriminatorLoss(self.device)
+        self.generator_loss = self.GeneratorLoss(self.feature_extractor, self.device)
 
     class DiscriminatorLoss(nn.Module):
-        def __init__(self, device, writer):
+        def __init__(self, device):
             super().__init__()
             self.bce_loss = BCELoss()
             self.device = device
-            self.writer = writer
 
         def forward(self, discriminator_output_of_cartoon_input, discriminator_output_of_cartoon_smoothed_input, discriminator_output_of_generated_image_input, epoch, write_to_tensorboard=False):
             actual_batch_size = discriminator_output_of_cartoon_input.size()[0]
@@ -188,22 +189,15 @@ class CartoonGAN:
 
             d_loss = d_loss_cartoon + d_loss_cartoon_smoothed + d_loss_generated_input
 
-            if write_to_tensorboard:
-                self.writer.add_scalar('d_loss_cartoon', d_loss_cartoon, epoch)
-                self.writer.add_scalar('d_loss_cartoon_smoothed', d_loss_cartoon_smoothed, epoch)
-                self.writer.add_scalar('d_loss_generated_input', d_loss_generated_input, epoch)
-                self.writer.add_scalar('d_loss', d_loss, epoch)
-
             return d_loss
 
     class GeneratorLoss(nn.Module):
-        def __init__(self, feature_extractor, device, writer):
+        def __init__(self, feature_extractor, device):
             super().__init__()
             self.w = 0.000005
             self.bce_loss = BCELoss()
             self.feature_extractor = feature_extractor
             self.device = device
-            self.writer = writer
 
         def forward(self, discriminator_output_of_generated_image_input, generator_input, generator_output, epoch, is_init_phase=False, write_to_tensorboard=False):
             if is_init_phase:
@@ -214,11 +208,6 @@ class CartoonGAN:
                 g_adversarial_loss = self._adversarial_loss_generator_part_only(discriminator_output_of_generated_image_input)
                 g_content_loss = self._content_loss(generator_input, generator_output)
                 g_loss = g_adversarial_loss + self.w * g_content_loss
-
-            if write_to_tensorboard:
-                self.writer.add_scalar('g_adversarial_loss', g_adversarial_loss, epoch)
-                self.writer.add_scalar('g_content_loss', g_content_loss, epoch)
-                self.writer.add_scalar('g_loss', g_loss, epoch)
 
             return g_loss
 
@@ -383,7 +372,84 @@ def plot_loss_curves(losses: list, val_losses: list, save_path: str = "plots") -
     plt.close()
 
 
+def load_checkpoint(checkpoint_path: str, device: torch.device) -> torch.nn.Module:
+    """
+    Loads the checkpoint for the Generator model.
+
+    Args:
+        checkpoint_path (str): Path to the checkpoint file.
+        device (torch.device): The device to load the model on.
+
+    Returns:
+        torch.nn.Module: The loaded Generator model.
+    """
+    if not os.path.exists('best_checkpoints'):
+        downloader = CheckpointsDownloader()
+        downloader.download()
+    checkpoint = torch.load(checkpoint_path, map_location=device)
+    model = Generator().to(device)
+    model.load_state_dict(checkpoint['g_state_dict'])
+    return model
+
+def preprocess_image(image_path: str, device: torch.device) -> torch.Tensor:
+    """
+    Preprocesses the input image for the model.
+
+    Args:
+        image_path (str): Path to the input image.
+        device (torch.device): The device to load the image on.
+
+    Returns:
+        torch.Tensor: The preprocessed image tensor.
+    """
+    img = Image.open(image_path)
+    transform = T.Compose([
+        T.Resize([256, 256]),
+        T.ToTensor()
+    ])
+    img = transform(img).unsqueeze(0).to(device)
+    return img
+
+def cartoon_gan(input_image: str) -> np.ndarray:
+    """
+    Generates a cartoon image using the trained Generator model.
+
+    Args:
+        input_image (str): Path to the input image.
+
+    Returns:
+        np.ndarray: The generated cartoon image.
+    """
+    img = preprocess_image(input_image, device)
+    result_image_checkpoint = G_inference(img)
+    cartoon = np.transpose(result_image_checkpoint[0].cpu().detach().numpy(), (1, 2, 0))
+    return cartoon
+
+def create_gradio_interface() -> gr.Interface:
+    """
+    Creates the Gradio interface for the Cartoon GAN.
+
+    Returns:
+        gr.Interface: The Gradio interface.
+    """
+    return gr.Interface(fn=cartoon_gan, inputs=gr.Image(type='filepath'), outputs="image", title="Cartoon GAN")
+
+def inference() -> None:
+    """
+    Main function to load the model, create the Gradio interface, and launch it.
+    """
+    global device, G_inference
+
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    checkpoint_path = os.path.join(os.getcwd(), 'best_checkpoints', 'cartoongan', 'model_3_checkpoint_ep220.pth')
+
+    G_inference = load_checkpoint(checkpoint_path, device)
+    cartoon_gan_interface = create_gradio_interface()
+    cartoon_gan_interface.launch(share=True)
+
+
+
 if __name__ == "__main__":
     gan = CartoonGAN()
-    losses, validation_losses = gan.train(2, 'checkpoints')
+    losses, validation_losses = gan.train(1, 'checkpoints')
     plot_loss_curves(losses, validation_losses)
