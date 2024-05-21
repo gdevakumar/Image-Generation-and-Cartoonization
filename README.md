@@ -63,5 +63,7 @@ python main.py --test cartoongan
 python main.py --train cartoongan
 ```
 
-`Note: Training this model requires Nvidia GPUs or else its gonna throw errors due to usage of fp16 precision supported only on few hardware!`
+### Note: 
+- Finetuning Dreambooth model requires Nvidia GPUs, else its gonna throw errors due to the usage of fp16 precision format supported only on few hardware! 
+- Use `notebooks/DreamBooth_Stable_Diffusion-1.ipynb` notebook for this case.
 
