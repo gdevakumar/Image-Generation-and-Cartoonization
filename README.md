@@ -34,6 +34,12 @@ source env/bin/activate
 pip install -r requirements.txt
 ```
 
+4. Download datasets
+```
+python download_datasets.py
+```
+
+
 ## Inference
 1. Download the best checkpoints 
 ```

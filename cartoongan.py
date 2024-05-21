@@ -434,7 +434,7 @@ def create_gradio_interface() -> gr.Interface:
     """
     return gr.Interface(fn=cartoon_gan, inputs=gr.Image(type='filepath'), outputs="image", title="Cartoon GAN")
 
-def inference() -> None:
+def cartoongan_inference() -> None:
     """
     Main function to load the model, create the Gradio interface, and launch it.
     """
