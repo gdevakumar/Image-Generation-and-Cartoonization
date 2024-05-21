@@ -1,11 +1,14 @@
 import os
 import json
+import boto3
 import requests
 import shutil
 import torch
 import gradio as gr
 from glob import glob
 from tqdm import tqdm
+from botocore import UNSIGNED
+from botocore.client import Config
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 from huggingface_hub import login
@@ -21,6 +24,7 @@ class DreamBoothTrainer:
         self.weights_dir = ""
 
         self._setup_directories()
+        self._download_best_params()
         login(token=self.huggingface_token)
         self._save_concepts_list()
 
@@ -28,6 +32,24 @@ class DreamBoothTrainer:
         os.makedirs(self.output_dir, exist_ok=True)
         for concept in self.concepts_list:
             os.makedirs(concept["instance_data_dir"], exist_ok=True)
+
+    def _download_best_params(self):
+        local_dir = os.path.join(os.getcwd(), 'best_checkpoints', 'dreambooth')
+        os.makedirs(local_dir, exist_ok=True)
+        s3 = boto3.client('s3', config=Config(signature_version=UNSIGNED))
+        paginator = s3.get_paginator('list_objects_v2')
+        pages = paginator.paginate(Bucket='data255-cartoongan', Prefix='4000/')
+
+        for page in tqdm(pages):
+            for obj in page.get('Contents', []):
+                key = obj['Key']
+                local_file_path = os.path.join(local_dir, os.path.relpath(key, '4000/'))
+                local_file_dir = os.path.dirname(local_file_path)
+                
+                if not os.path.exists(local_file_dir):
+                    os.makedirs(local_file_dir)
+                s3.download_file('data255-cartoongan', key, local_file_path)
+                print(f"Downloaded {key} to {local_file_path}")
 
     def _save_concepts_list(self):
         with open("concepts_list.json", "w") as f:
@@ -81,7 +103,7 @@ class DreamBoothTrainer:
         print("Training Finished!")
 
     def generate_images(self, prompt, negative_prompt, num_samples, guidance_scale, num_inference_steps, height=512, width=512):
-        pipe = StableDiffusionPipeline.from_pretrained(self.weights_dir, safety_checker=None, torch_dtype=torch.float16).to("cuda" if torch.cuda.is_available() else 'cpu')
+        pipe = StableDiffusionPipeline.from_pretrained(self.model_name, safety_checker=None).to("cuda" if torch.cuda.is_available() else 'cpu')
         pipe.scheduler = DDIMScheduler.from_config(pipe.scheduler.config)
         pipe.enable_xformers_memory_efficient_attention()
         
@@ -111,9 +133,9 @@ class DreamBoothTrainer:
         plt.savefig('grid.png', dpi=72)
 
     def convert_to_ckpt(self, fp16=True):
-        ckpt_path = os.path.join(self.weights_dir, "model.ckpt")
+        ckpt_path = os.path.join(self.output_dir, "model.ckpt")
         half_arg = "--half" if fp16 else ""
-        command = f"python convert_diffusers_to_original_stable_diffusion.py --model_path {self.weights_dir} --checkpoint_path {ckpt_path} {half_arg}"
+        command = f"python convert_diffusers_to_original_stable_diffusion.py --model_path {self.output_dir} --checkpoint_path {ckpt_path} {half_arg}"
         os.system(command)
         print(f"[*] Converted ckpt saved at {ckpt_path}")
 
@@ -124,7 +146,7 @@ class DreamBoothTrainer:
         with gr.Blocks() as demo:
             with gr.Row():
                 with gr.Column():
-                    prompt = gr.Textbox(label="Prompt", value="photo of zwx dog in a bucket")
+                    prompt = gr.Textbox(label="Prompt", value="photo of deva playing with a dog")
                     negative_prompt = gr.Textbox(label="Negative Prompt", value="")
                     run = gr.Button(value="Generate")
                     with gr.Row():
@@ -141,18 +163,6 @@ class DreamBoothTrainer:
 
         demo.launch(share=True)
 
-    def clean_up(self):
-        for f in glob(self.output_dir + os.sep + "*"):
-            if f != self.weights_dir:
-                shutil.rmtree(f)
-                print("Deleted", f)
-        for f in glob(self.weights_dir + "/*"):
-            if not f.endswith(".ckpt") and not f.endswith(".json"):
-                try:
-                    shutil.rmtree(f)
-                except NotADirectoryError:
-                    continue
-                print("Deleted", f)
 
 
 if __name__ == "__main__":
@@ -172,8 +182,5 @@ if __name__ == "__main__":
     trainer = DreamBoothTrainer(HUGGINGFACE_TOKEN, MODEL_NAME, OUTPUT_DIR, concepts_list)
     trainer.download_scripts()
     trainer.train_model()
-    # images = trainer.generate_images("photo of deva wearing blue sunglasses sitting at a beach", "", 4, 7.5, 24)
-    trainer.save_grid(OUTPUT_DIR)
     trainer.convert_to_ckpt()
     trainer.launch_gradio_demo()
-    trainer.clean_up()

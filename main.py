@@ -15,13 +15,11 @@ if args.train:
         losses, validation_losses = model.train(220, 'checkpoints')
         plot_loss_curves(losses, validation_losses)
     elif args.train == 'dreambooth':
-        
-        print('Finetuning Dreambooth model')
+        print('Try finetuning directly from ipynb notebook in notebooks/DreamBooth_Stable_Diffusion-1.ipynb file')
 
 if args.test:
     if args.test == 'cartoongan':
         print('Running Inference on Cartoon GAN')
         cartoongan_inference()
     elif args.test == 'dreambooth':
-        print('Running Inference on Dreambooth')
-        dreambooth_inference()
+        print('Try running inference directly from ipynb notebook in notebooks/DreamBooth_Stable_Diffusion-1.ipynb file')

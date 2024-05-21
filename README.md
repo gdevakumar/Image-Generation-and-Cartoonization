@@ -5,9 +5,16 @@ This project has 2 stages - Finetuning a pretrained Text-to-image model [StableD
 ## Files
 - ```download_datasets.py``` file downloads the datasets for Cartoon GAN and Dreambooth networks.
 - ```download_checkpoints.py``` file downloads the model checkpoints.
+- ```cartoongan.py``` file contains the training and inference code for Cartoon GAN.
+- ```dreambooth.py``` file contains the training and inference code for Dreambooth architecture in OOPS format.
+- ```main.py``` file is the entry point to run the inference of Cartoon GAN.
+- ```notebooks/``` directory contains the raw notebook files to run on Colab.
+- ```notebooks/DreamBooth_Stable_Diffusion-1.ipynb``` Notebook for finetuning and inference of Dreambooth network.
 
-## Dataset
-- Cartoon GAN: https://drive.google.com/file/d/1esNF4ZDtdQ0-UpIqNq4OHSkD-8Yp0JFP/view?usp=sharing
+## Important Links
+- Cartoon GAN Dataset: https://drive.google.com/file/d/1esNF4ZDtdQ0-UpIqNq4OHSkD-8Yp0JFP/view?usp=sharing
+- Project Repo: https://github.com/gdevakumar/Image-Generation-and-Cartoonization
+- Project Raw Artifacts: https://drive.google.com/drive/folders/1h52-b2ieE26NLJcQxnbzfc2B5WFK1LA7?usp=sharing
 
 ## To run this project
 1. Clone the repository
@@ -46,8 +53,15 @@ python download_datasets.py
 python download_checkpoints.py
 ```
 
-2. Run the inference script
+2. Run the inference script of Cartoon GAN
 ```
-python main.py --test
+python main.py --test cartoongan
 ```
+
+3. Run the training script of Cartoon GAN
+```
+python main.py --train cartoongan
+```
+
+`Note: Training this model requires Nvidia GPUs or else its gonna throw errors due to usage of fp16 precision supported only on few hardware!`
 
