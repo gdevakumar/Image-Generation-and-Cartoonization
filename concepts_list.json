@@ -1,0 +1,8 @@
+[
+    {
+        "instance_prompt": "photo of deva person",
+        "class_prompt": "photo of a person",
+        "instance_data_dir": "/Users/bugganamanidharreddy/Desktop/255-project/Image-Generation-and-Cartoonization/datasets/dreambooth/deva",
+        "class_data_dir": "/Users/bugganamanidharreddy/Desktop/255-project/Image-Generation-and-Cartoonization/datasets/dreambooth/person"
+    }
+]

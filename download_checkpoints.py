@@ -33,8 +33,8 @@ class CheckpointsDownloader:
         """
         # self._download_file_from_s3(MODEL_1, os.path.join(os.getcwd(), 'best_checkpoints', 'cartoongan', 'model_1_checkpoint_ep210.pth'))
         # self._download_file_from_s3(MODEL_2, os.path.join(os.getcwd(), 'best_checkpoints', 'cartoongan', 'model_2_checkpoint_ep210.pth'))
-        self._download_file_from_s3(MODEL_3, os.path.join(os.getcwd(), 'best_checkpoints', 'cartoongan', 'model_3_checkpoint_ep220.pth'))
-        # self._download_file_from_s3(DREAMBOOTH_CHKPTS, os.path.join(os.getcwd(), 'best_checkpoints', 'dreambooth', 'dreambooth_ep10k.pth'))
+        # self._download_file_from_s3(MODEL_3, os.path.join(os.getcwd(), 'best_checkpoints', 'cartoongan', 'model_3_checkpoint_ep220.pth'))
+        self._download_file_from_s3(DREAMBOOTH_CHKPTS, os.path.join(os.getcwd(), 'best_checkpoints', 'dreambooth'))
 
     def _download_file_from_s3(self, url: str, local_file_path: str) -> None:
         """
@@ -67,7 +67,7 @@ class CheckpointsDownloader:
 MODEL_1 = "https://data255-cartoongan.s3.amazonaws.com/checkpoints/model_1_checkpoint_ep210.pth"
 MODEL_2 = "https://data255-cartoongan.s3.amazonaws.com/checkpoints/model_2_checkpoint_ep210.pth"
 MODEL_3 = "https://data255-cartoongan.s3.amazonaws.com/checkpoints/model_3_checkpoint_ep220.pth"
-DREAMBOOTH_CHKPTS = ""
+DREAMBOOTH_CHKPTS = "https://data255-cartoongan.s3.amazonaws.com/4000/"
 
 
 

@@ -50,3 +50,4 @@ python download_checkpoints.py
 ```
 python main.py --test
 ```
+
